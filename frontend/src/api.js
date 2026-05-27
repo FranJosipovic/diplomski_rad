@@ -1,0 +1,26 @@
+const BASE = '/api';
+
+async function req(path, options) {
+  const res = await fetch(BASE + path, options);
+  if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+  return res.json().catch(() => null);
+}
+
+export const getLatest = () => req('/ocitavanja/latest');
+export const getThreshold = () => req('/threshold');
+export const setThreshold = (threshold) =>
+  req('/threshold', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ threshold }) });
+
+export const getSesije = () => req('/sesije');
+export const getAktivnaSesija = () => req('/sesije/aktivna').catch(() => null);
+export const getSesija = (id) => req(`/sesije/${id}`);
+export const startSesija = (body) =>
+  req('/sesije/start', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+export const stopSesija = (id) =>
+  req(`/sesije/${id}/stop`, { method: 'PUT' });
+
+export const getOcitavanja = (id) => req(`/sesije/${id}/ocitavanja`);
+export const getEventi = (id) => req(`/sesije/${id}/eventi`);
+
+export const pumpaOn = () => req('/pumpa/on', { method: 'POST' });
+export const pumpaOff = () => req('/pumpa/off', { method: 'POST' });
