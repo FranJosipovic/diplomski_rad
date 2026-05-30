@@ -20,10 +20,15 @@ public class MqttService : BackgroundService
     public DateTimeOffset? LatestTimestamp { get; private set; }
     public bool CurrentPumpaStatus { get; private set; }
     public float CurrentThreshold { get; set; } = 50f;
+    public float? LatestBaterijaVin { get; private set; }
+    public int? LatestBaterijaPostotak { get; private set; }
+    public bool SenzoriReady { get; private set; }
+    public bool PumpaReady { get; private set; }
 
     // Buffer za pariranje vlaga+temperatura u jedan Ocitavanje zapis
     private float? _pendingVlaga;
     private float? _pendingTemp;
+
 
     public MqttService(IServiceScopeFactory scopeFactory, IConfiguration config, ILogger<MqttService> logger)
     {
@@ -61,7 +66,9 @@ public class MqttService : BackgroundService
 
             await _client.SubscribeAsync("navodnjavanje/senzori/#");
             await _client.SubscribeAsync("navodnjavanje/pumpa/status");
+            await _client.SubscribeAsync("navodnjavanje/pumpa/baterija");
             await _client.SubscribeAsync("navodnjavanje/config/threshold");
+            await _client.SubscribeAsync("navodnjavanje/uredaj/#");
 
             _logger.LogInformation("MQTT connected to {host}:{port}", host, port);
         }
@@ -116,6 +123,25 @@ public class MqttService : BackgroundService
                     await TrySaveOcitavanjeAsync();
                 }
                 break;
+
+            case "navodnjavanje/uredaj/senzori":
+                SenzoriReady = payload == "ready";
+                _logger.LogInformation("Senzori uredaj: {status}", payload);
+                break;
+
+            case "navodnjavanje/uredaj/pumpa":
+                PumpaReady = payload == "ready";
+                _logger.LogInformation("Pumpa uredaj: {status}", payload);
+                break;
+
+            case "navodnjavanje/pumpa/baterija":
+                var batDoc = System.Text.Json.JsonDocument.Parse(payload);
+                var vin = batDoc.RootElement.GetProperty("vin").GetSingle();
+                var pct = batDoc.RootElement.GetProperty("postotak").GetInt32();
+                LatestBaterijaVin = vin;
+                LatestBaterijaPostotak = pct;
+                await SaveBaterijaAsync(vin, pct);
+                break;
         }
     }
 
@@ -125,9 +151,9 @@ public class MqttService : BackgroundService
         if (_pendingVlaga is null || _pendingTemp is null) return;
 
         var vlaga = _pendingVlaga.Value;
-        var temp  = _pendingTemp.Value;
+        var temp = _pendingTemp.Value;
         _pendingVlaga = null;
-        _pendingTemp  = null;
+        _pendingTemp = null;
 
         using var scope = _scopeFactory.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
@@ -137,10 +163,29 @@ public class MqttService : BackgroundService
 
         db.Ocitavanja.Add(new Ocitavanje
         {
-            SesijaId   = aktivna.Id,
-            Vlaga      = (decimal)vlaga,
+            SesijaId = aktivna.Id,
+            Vlaga = (decimal)vlaga,
             Temperatura = (decimal)temp,
-            Timestamp  = DateTimeOffset.UtcNow
+            Timestamp = DateTimeOffset.UtcNow
+        });
+
+        await db.SaveChangesAsync();
+    }
+
+    private async Task SaveBaterijaAsync(float vin, int pct)
+    {
+        using var scope = _scopeFactory.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+        var aktivna = await db.Sesije.FirstOrDefaultAsync(s => s.Kraj == null);
+        if (aktivna is null) return;
+
+        db.OcitavanjaBaterije.Add(new OcitavanjeBaterije
+        {
+            SesijaId = aktivna.Id,
+            Vin = (decimal)vin,
+            Postotak = pct,
+            Timestamp = DateTimeOffset.UtcNow
         });
 
         await db.SaveChangesAsync();
@@ -164,8 +209,8 @@ public class MqttService : BackgroundService
 
         db.EventiPumpe.Add(new EventPumpe
         {
-            SesijaId  = aktivna.Id,
-            Status    = status,
+            SesijaId = aktivna.Id,
+            Status = status,
             Timestamp = DateTimeOffset.UtcNow
         });
 

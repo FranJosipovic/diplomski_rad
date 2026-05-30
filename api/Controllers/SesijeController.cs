@@ -22,7 +22,7 @@ public class SesijeController(AppDbContext db, MqttService mqtt) : ControllerBas
             .Select(s => new
             {
                 s.Id,
-                mod    = s.Mod.Naziv,
+                mod = s.Mod.Naziv,
                 s.ModId,
                 s.Threshold,
                 s.IntervalMinuta,
@@ -51,7 +51,7 @@ public class SesijeController(AppDbContext db, MqttService mqtt) : ControllerBas
         return Ok(new
         {
             s.Id,
-            mod  = s.Mod.Naziv,
+            mod = s.Mod.Naziv,
             s.ModId,
             s.Threshold,
             s.IntervalMinuta,
@@ -83,12 +83,12 @@ public class SesijeController(AppDbContext db, MqttService mqtt) : ControllerBas
             .ToListAsync();
 
         // Agregatne statistike
-        int total       = ocitavanja.Count;
-        int ispod       = ocitavanja.Count(o => o.Vlaga < s.Threshold);
-        double postoIspod   = total > 0 ? (double)ispod * 100.0 / total : 0;
-        double prosjecna    = total > 0 ? (double)ocitavanja.Average(o => o.Vlaga) : 0;
-        double minVlaga     = total > 0 ? (double)ocitavanja.Min(o => o.Vlaga) : 0;
-        double maxVlaga     = total > 0 ? (double)ocitavanja.Max(o => o.Vlaga) : 0;
+        int total = ocitavanja.Count;
+        int ispod = ocitavanja.Count(o => o.Vlaga < s.Threshold);
+        double postoIspod = total > 0 ? (double)ispod * 100.0 / total : 0;
+        double prosjecna = total > 0 ? (double)ocitavanja.Average(o => o.Vlaga) : 0;
+        double minVlaga = total > 0 ? (double)ocitavanja.Min(o => o.Vlaga) : 0;
+        double maxVlaga = total > 0 ? (double)ocitavanja.Max(o => o.Vlaga) : 0;
 
         // Trajanje pumpe: pari ON → OFF
         double sekundeUpaljeno = 0;
@@ -96,7 +96,7 @@ public class SesijeController(AppDbContext db, MqttService mqtt) : ControllerBas
         DateTimeOffset? onTime = null;
         foreach (var e in eventi)
         {
-            if (e.Status && onTime is null)  { onTime = e.Timestamp; brPaljenja++; }
+            if (e.Status && onTime is null) { onTime = e.Timestamp; brPaljenja++; }
             else if (!e.Status && onTime is not null) { sekundeUpaljeno += (e.Timestamp - onTime.Value).TotalSeconds; onTime = null; }
         }
 
@@ -107,7 +107,7 @@ public class SesijeController(AppDbContext db, MqttService mqtt) : ControllerBas
         return Ok(new
         {
             s.Id,
-            mod  = s.Mod.Naziv,
+            mod = s.Mod.Naziv,
             s.ModId,
             s.Threshold,
             s.IntervalMinuta,
@@ -116,13 +116,13 @@ public class SesijeController(AppDbContext db, MqttService mqtt) : ControllerBas
             s.Pocetak,
             s.Kraj,
             s.Napomena,
-            trajanjeSek         = Math.Round(trajanjeSek, 0),
-            prosjecnaVlaga      = Math.Round(prosjecna, 2),
-            minVlaga            = Math.Round(minVlaga, 2),
-            maxVlaga            = Math.Round(maxVlaga, 2),
+            trajanjeSek = Math.Round(trajanjeSek, 0),
+            prosjecnaVlaga = Math.Round(prosjecna, 2),
+            minVlaga = Math.Round(minVlaga, 2),
+            maxVlaga = Math.Round(maxVlaga, 2),
             postoIspodThresholda = Math.Round(postoIspod, 2),
             brPaljenja,
-            sekundeUpaljeno     = Math.Round(sekundeUpaljeno, 1)
+            sekundeUpaljeno = Math.Round(sekundeUpaljeno, 1)
         });
     }
 
@@ -140,6 +140,22 @@ public class SesijeController(AppDbContext db, MqttService mqtt) : ControllerBas
             .ToListAsync();
 
         return Ok(ocitavanja);
+    }
+
+    // GET /api/sesije/{id}/baterija
+    [HttpGet("{id:int}/baterija")]
+    public async Task<IActionResult> GetBaterija(int id)
+    {
+        var postoji = await db.Sesije.AnyAsync(s => s.Id == id);
+        if (!postoji) return NotFound();
+
+        var baterija = await db.OcitavanjaBaterije
+            .Where(b => b.SesijaId == id)
+            .OrderBy(b => b.Timestamp)
+            .Select(b => new { b.Timestamp, vin = (double)b.Vin, postotak = b.Postotak })
+            .ToListAsync();
+
+        return Ok(baterija);
     }
 
     // GET /api/sesije/{id}/eventi
@@ -162,6 +178,14 @@ public class SesijeController(AppDbContext db, MqttService mqtt) : ControllerBas
     [HttpPost("start")]
     public async Task<IActionResult> Start([FromBody] StartSesijaRequest req)
     {
+        if (!mqtt.SenzoriReady || !mqtt.PumpaReady)
+            return Conflict(new
+            {
+                error = "Uređaji nisu spremni.",
+                senzori = mqtt.SenzoriReady,
+                pumpa = mqtt.PumpaReady,
+            });
+
         // Zatvori eventualno aktivnu sesiju
         var existing = await db.Sesije.FirstOrDefaultAsync(s => s.Kraj == null);
         if (existing is not null)
@@ -172,13 +196,13 @@ public class SesijeController(AppDbContext db, MqttService mqtt) : ControllerBas
 
         var sesija = new Sesija
         {
-            ModId            = req.ModId,
-            Threshold        = req.Threshold,
-            IntervalMinuta   = req.IntervalMinuta,
+            ModId = req.ModId,
+            Threshold = req.Threshold,
+            IntervalMinuta = req.IntervalMinuta,
             IntervalPaljenja = req.IntervalPaljenja,
             TrajanjePaljenja = req.TrajanjePaljenja,
-            Napomena         = req.Napomena,
-            Pocetak          = DateTimeOffset.UtcNow
+            Napomena = req.Napomena,
+            Pocetak = DateTimeOffset.UtcNow
         };
 
         db.Sesije.Add(sesija);
@@ -189,7 +213,7 @@ public class SesijeController(AppDbContext db, MqttService mqtt) : ControllerBas
 
         var inv = System.Globalization.CultureInfo.InvariantCulture;
         await mqtt.PublishAsync("navodnjavanje/config/threshold", req.Threshold.ToString("F2", inv), retain: true);
-        await mqtt.PublishAsync("navodnjavanje/config/mod",       req.ModId.ToString(),               retain: true);
+        await mqtt.PublishAsync("navodnjavanje/config/mod", req.ModId.ToString(), retain: true);
 
         if (req.ModId == 2 && req.IntervalMinuta.HasValue)
             await mqtt.PublishAsync("navodnjavanje/config/interval", req.IntervalMinuta.Value.ToString(), retain: true);
@@ -209,6 +233,23 @@ public class SesijeController(AppDbContext db, MqttService mqtt) : ControllerBas
         return Ok(new { sesija.Id });
     }
 
+    // DELETE /api/sesije/{id}
+    [HttpDelete("{id:int}")]
+    public async Task<IActionResult> Delete(int id)
+    {
+        var sesija = await db.Sesije.FindAsync(id);
+        if (sesija is null) return NotFound();
+        if (sesija.Kraj is null) return Conflict(new { error = "Ne možeš obrisati aktivnu sesiju. Prvo je zaustavi." });
+
+        db.OcitavanjaBaterije.RemoveRange(db.OcitavanjaBaterije.Where(b => b.SesijaId == id));
+        db.EventiPumpe.RemoveRange(db.EventiPumpe.Where(e => e.SesijaId == id));
+        db.Ocitavanja.RemoveRange(db.Ocitavanja.Where(o => o.SesijaId == id));
+        db.Sesije.Remove(sesija);
+        await db.SaveChangesAsync();
+
+        return Ok(new { deleted = id });
+    }
+
     // PUT /api/sesije/{id}/stop
     [HttpPut("{id:int}/stop")]
     public async Task<IActionResult> Stop(int id)
@@ -220,7 +261,7 @@ public class SesijeController(AppDbContext db, MqttService mqtt) : ControllerBas
         await db.SaveChangesAsync();
 
         await mqtt.PublishAsync("navodnjavanje/sesija/status", "false", retain: true);
-        await mqtt.PublishAsync("navodnjavanje/pumpa/komanda",  "false");
+        await mqtt.PublishAsync("navodnjavanje/pumpa/komanda", "false");
 
         return Ok(new { sesija.Id, sesija.Kraj });
     }

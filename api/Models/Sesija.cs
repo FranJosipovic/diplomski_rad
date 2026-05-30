@@ -15,4 +15,5 @@ public class Sesija
     public Mod Mod { get; set; } = null!;
     public ICollection<Ocitavanje> Ocitavanja { get; set; } = [];
     public ICollection<EventPumpe> EventiPumpe { get; set; } = [];
+    public ICollection<OcitavanjeBaterije> OcitavanjaBaterije { get; set; } = [];
 }

@@ -1,9 +1,9 @@
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
-import Layout from './components/Layout.jsx';
-import Dashboard from './pages/Dashboard.jsx';
-import KontrolaSesije from './pages/KontrolaSesije.jsx';
-import PovijestSesija from './pages/PovijestSesija.jsx';
-import UsporedbaSeija from './pages/UsporedbaSeija.jsx';
+import { BrowserRouter, Routes, Route } from "react-router-dom";
+import Layout from "./components/Layout.jsx";
+import Dashboard from "./pages/Dashboard.jsx";
+import KontrolaSesije from "./pages/KontrolaSesije.jsx";
+import PovijestSesija from "./pages/PovijestSesija.jsx";
+import UsporedbaSeija from "./pages/UsporedbaSeija.jsx";
 
 export default function App() {
   return (

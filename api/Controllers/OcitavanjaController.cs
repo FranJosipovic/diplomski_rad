@@ -11,10 +11,10 @@ public class OcitavanjaController(MqttService mqtt) : ControllerBase
     public IActionResult Latest() =>
         Ok(new
         {
-            vlaga        = mqtt.LatestVlaga,
-            temperatura  = mqtt.LatestTemperatura,
-            timestamp    = mqtt.LatestTimestamp,
-            pumpaStatus  = mqtt.CurrentPumpaStatus,
-            threshold    = mqtt.CurrentThreshold
+            vlaga = mqtt.LatestVlaga,
+            temperatura = mqtt.LatestTemperatura,
+            timestamp = mqtt.LatestTimestamp,
+            pumpaStatus = mqtt.CurrentPumpaStatus,
+            threshold = mqtt.CurrentThreshold
         });
 }
