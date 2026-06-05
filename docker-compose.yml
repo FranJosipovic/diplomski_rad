@@ -10,16 +10,51 @@ services:
       - "5434:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U asn_usr -d asn_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
 
   mosquitto:
     image: eclipse-mosquitto:2
     container_name: asn-mosquitto
     ports:
-      - "1883:1883"   # MQTT
-      - "9001:9001"   # WebSocket
+      - "1883:1883"
+      - "9001:9001"
     volumes:
       - ./mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
       - mosquitto_data:/mosquitto/data
+    restart: unless-stopped
+
+  api:
+    build:
+      context: ./api
+      dockerfile: Dockerfile
+    container_name: asn-api
+    environment:
+      - ConnectionStrings__Default=Host=asn-postgres;Port=5432;Database=asn_db;Username=asn_usr;Password=asn_pass
+      - Mqtt__Host=asn-mosquitto
+      - Mqtt__Port=1883
+    ports:
+      - "5206:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      mosquitto:
+        condition: service_started
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: asn-frontend
+    ports:
+      - "3000:80"
+    depends_on:
+      - api
     restart: unless-stopped
 
 volumes:

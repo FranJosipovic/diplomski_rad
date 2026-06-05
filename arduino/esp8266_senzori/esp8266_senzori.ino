@@ -100,6 +100,21 @@ float vlahaPostotak(int raw) {
   return constrain(postotak, 0.0f, 100.0f);
 }
 
+// Izmjeri i objavi vlagu + temperaturu.
+// retained=true za normalna periodička mjerenja u sesiji,
+// retained=false za diagnostički "read" na zahtjev (gumb na GUI-u).
+void publishOcitavanje(bool retained) {
+  shtcSensor.sample();
+  float temp  = shtcSensor.readTempC();
+  int   raw   = analogRead(MOISTURE_PIN);
+  float vlaga = vlahaPostotak(raw);
+
+  Serial.printf("Vlaga: %.1f%% (raw=%d)  Temp: %.1f°C\n", vlaga, raw, temp);
+
+  mqtt.publish("navodnjavanje/senzori/vlaga",       String(vlaga, 1).c_str(), retained);
+  mqtt.publish("navodnjavanje/senzori/temperatura", String(temp,  1).c_str(), retained);
+}
+
 // ── MQTT callback ─────────────────────────────────────────────────────────────
 void mqttCallback(char* topic, byte* payload, unsigned int length) {
   String msg;
@@ -109,6 +124,11 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
     sesijaAktivna = (msg == "true");
     ledState = sesijaAktivna ? LED_SESSION : LED_READY;
     Serial.printf("SESIJA  %s\n", sesijaAktivna ? "aktivna" : "neaktivna");
+
+  } else if (String(topic) == "navodnjavanje/senzori/komanda" && msg == "read") {
+    // Diagnostički read na zahtjev — objavi neovisno o sesiji (ne sprema se u bazu)
+    Serial.println("KOMANDA read — objavljujem trenutno očitavanje");
+    publishOcitavanje(false);
   }
 }
 
@@ -137,6 +157,7 @@ void connectMqtt() {
     if (ok) {
       Serial.println("spojeno");
       mqtt.subscribe("navodnjavanje/sesija/status");
+      mqtt.subscribe("navodnjavanje/senzori/komanda");
       mqtt.publish("navodnjavanje/uredaj/senzori", "ready", true);
     } else {
       Serial.printf("neuspjelo (rc=%d), pokušavam za 3s\n", mqtt.state());
@@ -189,18 +210,6 @@ void loop() {
 
   if (millis() - lastPublish >= PUBLISH_INTERVAL_MS) {
     lastPublish = millis();
-
-    shtcSensor.sample();
-    float temp  = shtcSensor.readTempC();
-    int   raw   = analogRead(MOISTURE_PIN);
-    float vlaga = vlahaPostotak(raw);
-
-    Serial.printf("Vlaga: %.1f%% (raw=%d)  Temp: %.1f°C  Sesija: %s\n",
-                  vlaga, raw, temp, sesijaAktivna ? "aktivna" : "neaktivna");
-
-    if (!sesijaAktivna) return;
-
-    mqtt.publish("navodnjavanje/senzori/vlaga",       String(vlaga, 1).c_str(), true);
-    mqtt.publish("navodnjavanje/senzori/temperatura", String(temp,  1).c_str(), true);
+    if (sesijaAktivna) publishOcitavanje(true);
   }
 }

@@ -6,6 +6,7 @@ const NAV = [
   { to: "/sesija", num: "02", label: "Sesija", sub: "Upravljanje" },
   { to: "/povijest", num: "03", label: "Povijest", sub: "Analiza" },
   { to: "/usporedba", num: "04", label: "Usporedba", sub: "Grafovi" },
+  { to: "/dijagnostika", num: "05", label: "Dijagnostika", sub: "Test senzora" },
 ];
 
 export default function Layout({ children }) {

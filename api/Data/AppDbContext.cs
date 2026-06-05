@@ -10,6 +10,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<Ocitavanje> Ocitavanja => Set<Ocitavanje>();
     public DbSet<EventPumpe> EventiPumpe => Set<EventPumpe>();
     public DbSet<OcitavanjeBaterije> OcitavanjaBaterije => Set<OcitavanjeBaterije>();
+    public DbSet<WakeEvent> WakeEventi => Set<WakeEvent>();
 
     protected override void OnModelCreating(ModelBuilder model)
     {
@@ -58,6 +59,14 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.HasOne(o => o.Sesija)
              .WithMany(s => s.OcitavanjaBaterije)
              .HasForeignKey(o => o.SesijaId);
+        });
+
+        model.Entity<WakeEvent>(e =>
+        {
+            e.ToTable("wake_event");
+            e.HasOne(w => w.Sesija)
+             .WithMany(s => s.WakeEventi)
+             .HasForeignKey(w => w.SesijaId);
         });
     }
 }

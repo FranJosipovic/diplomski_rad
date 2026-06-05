@@ -341,6 +341,12 @@ void setup() {
   mqtt.subscribe("navodnjavanje/pumpa/komanda");
   mqtt.subscribe("navodnjavanje/senzori/vlaga");
 
+  // Označi buđenje iz deep sleepa (Mod 2/3) — API to bilježi i graf prikazuje kao oznaku
+  if (fromDeepSleep) {
+    mqtt.publish("navodnjavanje/pumpa/wake", "1");
+    log("WAKE   objavljeno buđenje iz deep sleepa");
+  }
+
   log("MQTT   čekam retained poruke (1.2s)...");
   mqttLoopMs(1200);
 

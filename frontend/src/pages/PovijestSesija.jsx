@@ -5,6 +5,7 @@ import {
   getOcitavanja,
   getEventi,
   getBaterija,
+  getWakeup,
   deleteSesija,
 } from "../api.js";
 import {
@@ -78,6 +79,100 @@ function PumpBandsOverlay({ bands, xAxisMap, offset }) {
       })}
     </>
   );
+}
+
+// Crta okomite oznake buđenja iz deep sleepa (Mod 2/3) kao SVG linije
+function WakeMarkersOverlay({ wakes, xAxisMap, offset }) {
+  const xAxis = xAxisMap && Object.values(xAxisMap)[0];
+  if (!xAxis?.scale || !offset || !wakes?.length) return null;
+  const { top, height } = offset;
+  return (
+    <>
+      {wakes.map((t, i) => {
+        const x = xAxis.scale(t);
+        if (isNaN(x)) return null;
+        return (
+          <g key={i}>
+            <line
+              x1={x}
+              x2={x}
+              y1={top}
+              y2={top + height}
+              stroke="#9887cc"
+              strokeWidth={1}
+              strokeDasharray="2 3"
+              strokeOpacity={0.7}
+            />
+            <circle cx={x} cy={top} r={2.5} fill="#9887cc" />
+          </g>
+        );
+      })}
+    </>
+  );
+}
+
+// Najbliže očitavanje baterije za zadani timestamp (nearest-neighbour join)
+function nearestBat(bat, t) {
+  if (!bat?.length) return null;
+  let best = bat[0];
+  let bestD = Math.abs(bat[0].t - t);
+  for (const b of bat) {
+    const d = Math.abs(b.t - t);
+    if (d < bestD) {
+      bestD = d;
+      best = b;
+    }
+  }
+  return best;
+}
+
+function buildCsv(rows, columns) {
+  const esc = (v) => {
+    if (v === null || v === undefined) return "";
+    const s = String(v);
+    return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+  };
+  const header = columns.map((c) => esc(c.label)).join(",");
+  const body = rows
+    .map((r) => columns.map((c) => esc(c.get(r))).join(","))
+    .join("\n");
+  return "﻿" + header + "\n" + body; // BOM za Excel
+}
+
+function downloadCsv(filename, content) {
+  const blob = new Blob([content], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+function exportSesija(details, augOc, bat) {
+  const columns = [
+    { label: "timestamp_iso", get: (r) => new Date(r.t).toISOString() },
+    {
+      label: "vrijeme_local",
+      get: (r) => new Date(r.t).toLocaleString("hr"),
+    },
+    { label: "vlaga_pct", get: (r) => r.vlaga },
+    { label: "temperatura_c", get: (r) => r.temperatura },
+    { label: "threshold_pct", get: () => details.threshold },
+    { label: "pumpa_on", get: (r) => (r.pumpaOn ? 1 : 0) },
+    {
+      label: "baterija_vin_v",
+      get: (r) => nearestBat(bat, r.t)?.vin ?? "",
+    },
+    {
+      label: "baterija_pct",
+      get: (r) => nearestBat(bat, r.t)?.postotak ?? "",
+    },
+  ];
+  const csv = buildCsv(augOc, columns);
+  downloadCsv(`sesija-${details.id}-${details.mod}.csv`, csv);
 }
 
 function ModBadge({ mod }) {
@@ -235,6 +330,7 @@ export default function PovijestSesija() {
   const [oc, setOc] = useState([]);
   const [ev, setEv] = useState([]);
   const [bat, setBat] = useState([]);
+  const [wake, setWake] = useState([]);
   const [loading, setLoading] = useState(false);
   const [deleting, setDeleting] = useState(null);
 
@@ -275,19 +371,22 @@ export default function PovijestSesija() {
       setOc([]);
       setEv([]);
       setBat([]);
+      setWake([]);
       return;
     }
     setSel(s);
     setLoading(true);
     try {
-      const [det, ocList, evList, batList] = await Promise.all([
+      const [det, ocList, evList, batList, wakeList] = await Promise.all([
         getSesija(s.id),
         getOcitavanja(s.id),
         getEventi(s.id),
         getBaterija(s.id),
+        getWakeup(s.id),
       ]);
       setDetails(det);
       setEv(evList ?? []);
+      setWake((wakeList ?? []).map((w) => new Date(w.timestamp).getTime()));
       setOc(
         (ocList ?? []).map((o) => ({
           t: new Date(o.timestamp).getTime(),
@@ -556,18 +655,37 @@ export default function PovijestSesija() {
                 </span>
               )}
             </div>
-            <span
-              style={{
-                fontFamily: "var(--font-mono)",
-                fontSize: 10,
-                color: "var(--tx-2)",
-              }}
-            >
-              {new Date(details.pocetak).toLocaleString("hr")}
-              {details.kraj
-                ? ` → ${new Date(details.kraj).toLocaleString("hr")}`
-                : " → LIVE"}
-            </span>
+            <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+              <span
+                style={{
+                  fontFamily: "var(--font-mono)",
+                  fontSize: 10,
+                  color: "var(--tx-2)",
+                }}
+              >
+                {new Date(details.pocetak).toLocaleString("hr")}
+                {details.kraj
+                  ? ` → ${new Date(details.kraj).toLocaleString("hr")}`
+                  : " → LIVE"}
+              </span>
+              <button
+                onClick={() => exportSesija(details, augOc, bat)}
+                disabled={augOc.length === 0}
+                style={{
+                  background: "none",
+                  border: "1px solid var(--br-2)",
+                  borderRadius: "var(--r-xs)",
+                  color: augOc.length === 0 ? "var(--tx-2)" : "var(--teal)",
+                  fontFamily: "var(--font-mono)",
+                  fontSize: 10,
+                  padding: "4px 10px",
+                  cursor: augOc.length === 0 ? "default" : "pointer",
+                  opacity: augOc.length === 0 ? 0.5 : 1,
+                }}
+              >
+                ↓ export CSV
+              </button>
+            </div>
           </div>
 
           {/* Stats grid */}
@@ -673,6 +791,22 @@ export default function PovijestSesija() {
                     ),
                     label: "threshold",
                   },
+                  ...(wake.length > 0
+                    ? [
+                        {
+                          swatch: (
+                            <div
+                              style={{
+                                width: 0,
+                                height: 12,
+                                borderLeft: "2px dashed #9887cc",
+                              }}
+                            />
+                          ),
+                          label: "buđenje",
+                        },
+                      ]
+                    : []),
                 ]}
               >
                 Vlaga tla
@@ -720,6 +854,11 @@ export default function PovijestSesija() {
                   <Customized
                     component={(props) => (
                       <PumpBandsOverlay bands={bands} {...props} />
+                    )}
+                  />
+                  <Customized
+                    component={(props) => (
+                      <WakeMarkersOverlay wakes={wake} {...props} />
                     )}
                   />
                   <ReferenceLine
@@ -879,7 +1018,7 @@ export default function PovijestSesija() {
                       <YAxis
                         yAxisId="vin"
                         orientation="right"
-                        domain={[2.8, 4.3]}
+                        domain={[3.0, 4.2]}
                         tick={AXIS_STYLE}
                         axisLine={false}
                         tickLine={false}

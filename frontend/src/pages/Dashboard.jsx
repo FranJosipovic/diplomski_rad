@@ -19,6 +19,7 @@ import {
   getOcitavanja,
   getEventi,
   getBaterija,
+  getWakeup,
 } from "../api.js";
 
 const mono = (n, dec = 1) => (n != null ? Number(n).toFixed(dec) : "—");
@@ -138,6 +139,35 @@ function Tag({ color, children }) {
     >
       {children}
     </span>
+  );
+}
+
+function WakeMarkersOverlay({ wakes, xAxisMap, offset }) {
+  const xAxis = xAxisMap && Object.values(xAxisMap)[0];
+  if (!xAxis?.scale || !offset || !wakes?.length) return null;
+  const { top, height } = offset;
+  return (
+    <>
+      {wakes.map((t, i) => {
+        const x = xAxis.scale(t);
+        if (isNaN(x)) return null;
+        return (
+          <g key={i}>
+            <line
+              x1={x}
+              x2={x}
+              y1={top}
+              y2={top + height}
+              stroke="#9887cc"
+              strokeWidth={1}
+              strokeDasharray="2 3"
+              strokeOpacity={0.7}
+            />
+            <circle cx={x} cy={top} r={2.5} fill="#9887cc" />
+          </g>
+        );
+      })}
+    </>
   );
 }
 
@@ -270,6 +300,7 @@ export default function Dashboard() {
   const [ocData, setOcData] = useState([]);
   const [eventi, setEventi] = useState([]);
   const [batData, setBatData] = useState([]);
+  const [wakeData, setWakeData] = useState([]);
   const [thrInput, setThrInput] = useState("");
   const [toast, setToast] = useState(null);
 
@@ -289,12 +320,14 @@ export default function Dashboard() {
       if (thrInput === "") setThrInput(String(latest?.threshold ?? 50));
 
       if (aktivna?.id) {
-        const [ocList, evList, batList] = await Promise.all([
+        const [ocList, evList, batList, wakeList] = await Promise.all([
           getOcitavanja(aktivna.id),
           getEventi(aktivna.id),
           getBaterija(aktivna.id),
+          getWakeup(aktivna.id),
         ]);
         setEventi(evList ?? []);
+        setWakeData((wakeList ?? []).map((w) => new Date(w.timestamp).getTime()));
         setOcData(
           (ocList ?? []).map((o) => ({
             t: new Date(o.timestamp).getTime(),
@@ -313,6 +346,7 @@ export default function Dashboard() {
         setOcData([]);
         setEventi([]);
         setBatData([]);
+        setWakeData([]);
       }
     } catch {
       /* broker offline */
@@ -669,6 +703,27 @@ export default function Dashboard() {
                 />
                 threshold
               </div>
+              {wakeData.length > 0 && (
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 5,
+                    fontFamily: "var(--font-mono)",
+                    fontSize: 10,
+                    color: "var(--tx-2)",
+                  }}
+                >
+                  <div
+                    style={{
+                      width: 0,
+                      height: 12,
+                      borderLeft: "2px dashed #9887cc",
+                    }}
+                  />
+                  buđenje
+                </div>
+              )}
             </div>
           </div>
           <ResponsiveContainer width="100%" height={220}>
@@ -711,6 +766,11 @@ export default function Dashboard() {
               <Customized
                 component={(props) => (
                   <PumpBandsOverlay bands={bands} {...props} />
+                )}
+              />
+              <Customized
+                component={(props) => (
+                  <WakeMarkersOverlay wakes={wakeData} {...props} />
                 )}
               />
 
@@ -916,7 +976,7 @@ export default function Dashboard() {
               <YAxis
                 yAxisId="vin"
                 orientation="right"
-                domain={[2.8, 4.3]}
+                domain={[3.0, 4.2]}
                 tick={AXIS_STYLE}
                 axisLine={false}
                 tickLine={false}

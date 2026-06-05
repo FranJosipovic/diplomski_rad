@@ -30,8 +30,11 @@ export const deleteSesija = (id) => req(`/sesije/${id}`, { method: "DELETE" });
 export const getOcitavanja = (id) => req(`/sesije/${id}/ocitavanja`);
 export const getEventi = (id) => req(`/sesije/${id}/eventi`);
 export const getBaterija = (id) => req(`/sesije/${id}/baterija`);
+export const getWakeup = (id) => req(`/sesije/${id}/wakeup`);
 
 export const pumpaOn = () => req("/pumpa/on", { method: "POST" });
 export const pumpaOff = () => req("/pumpa/off", { method: "POST" });
 
 export const getUredajiStatus = () => req("/uredaji/status");
+
+export const citajSenzor = () => req("/senzori/citaj", { method: "POST" });

@@ -174,6 +174,22 @@ public class SesijeController(AppDbContext db, MqttService mqtt) : ControllerBas
         return Ok(eventi);
     }
 
+    // GET /api/sesije/{id}/wakeup  — buđenja iz deep sleepa (Mod 2/3)
+    [HttpGet("{id:int}/wakeup")]
+    public async Task<IActionResult> GetWakeup(int id)
+    {
+        var postoji = await db.Sesije.AnyAsync(s => s.Id == id);
+        if (!postoji) return NotFound();
+
+        var wakeups = await db.WakeEventi
+            .Where(w => w.SesijaId == id)
+            .OrderBy(w => w.Timestamp)
+            .Select(w => new { w.Timestamp })
+            .ToListAsync();
+
+        return Ok(wakeups);
+    }
+
     // POST /api/sesije/start
     [HttpPost("start")]
     public async Task<IActionResult> Start([FromBody] StartSesijaRequest req)
@@ -241,6 +257,7 @@ public class SesijeController(AppDbContext db, MqttService mqtt) : ControllerBas
         if (sesija is null) return NotFound();
         if (sesija.Kraj is null) return Conflict(new { error = "Ne možeš obrisati aktivnu sesiju. Prvo je zaustavi." });
 
+        db.WakeEventi.RemoveRange(db.WakeEventi.Where(w => w.SesijaId == id));
         db.OcitavanjaBaterije.RemoveRange(db.OcitavanjaBaterije.Where(b => b.SesijaId == id));
         db.EventiPumpe.RemoveRange(db.EventiPumpe.Where(e => e.SesijaId == id));
         db.Ocitavanja.RemoveRange(db.Ocitavanja.Where(o => o.SesijaId == id));

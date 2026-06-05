@@ -32,3 +32,13 @@ arduino/**/build/
 
 # ── Claude internal ───────────────────────────────────────────────────────────
 .claude/
+
+CLAUDE.md
+PLAN-DIPLOMSKOG.md
+
+rad/
+pisanje/
+
+mjerenja/
+
+esp32_kalibracija/

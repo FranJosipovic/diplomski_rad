@@ -16,7 +16,7 @@ ESP32 (senzori) ──MQTT publish──→ Mosquitto Broker ←──MQTT subsc
                                           ↑
                                   MQTT publish ←── .NET API
                                           ↓
-                                  MQTT subscribe ── ESP8266 (pumpa/relej)
+                                  MQTT subscribe ── ESP32-S3 (pumpa/relej)
 
 Frontend ──REST polling (60s)──→ .NET Minimal API ──→ PostgreSQL
 Frontend ──manual refresh──────→ .NET Minimal API
@@ -27,7 +27,7 @@ Frontend ──manual refresh──────→ .NET Minimal API
 | Komponenta | Tehnologija | Uloga |
 |---|---|---|
 | Senzorski uređaj | ESP32 | Mjeri vlagu tla i temperaturu, šalje na MQTT |
-| Aktuatorski uređaj | ESP8266 (Dasduino Connect) | Prima komande s MQTT, pali/gasi pumpu preko releja |
+| Aktuatorski uređaj | ESP32-S3 (Soldered Nula) | Prima komande s MQTT, pali/gasi pumpu preko releja |
 | Broker | Mosquitto | MQTT posrednik između uređaja i API-ja |
 | Backend | .NET Minimal API | REST API, MQTT klijent u backgroundu, zapis u bazu |
 | Baza | PostgreSQL | Persistencija sesija, očitavanja, eventi pumpe |
@@ -38,28 +38,28 @@ Frontend ──manual refresh──────→ .NET Minimal API
 ## Načini rada (scenariji)
 
 ### Mod 1 — Pull (stalno aktivan)
-- ESP8266 je **stalno spojen** na MQTT broker
+- ESP32-S3 je **stalno spojen** na MQTT broker
 - Broker **push-a** promjene thresholda odmah na uređaj
-- ESP8266 kontinuirano sluša i reagira u realnom vremenu
+- ESP32-S3 kontinuirano sluša i reagira u realnom vremenu
 - **Prednost:** precizna reakcija, minimalno kašnjenje
 - **Nedostatak:** visoka potrošnja baterije
 
 ### Mod 2 — Push (deep sleep)
-- ESP8266 spava N minuta → budi se → spoji na WiFi i MQTT
+- ESP32-S3 spava N minuta → budi se → spoji na WiFi i MQTT
 - Subscribea na threshold topic → broker **odmah šalje retained poruku**
-- ESP8266 odlučuje o pumpi → publishuje očitavanja → vraća se u sleep
+- ESP32-S3 odlučuje o pumpi → publishuje očitavanja → vraća se u sleep
 - **Prednost:** niska potrošnja baterije
 - **Nedostatak:** kašnjenje reakcije do N minuta
 
 ### Mod 3 — Timer (slijepi)
-- ESP8266 spava X minuta → budi se → pali pumpu Y sekundi → spava
+- ESP32-S3 spava X minuta → budi se → pali pumpu Y sekundi → spava
 - **Ne gleda senzore** — fiksni raspored bez povratne informacije
 - Služi kao **baseline** za usporedbu
 - **Prednost:** najjednostavnija implementacija
 - **Nedostatak:** može prekomjerno ili nedovoljno zalijevati
 
 ### Prijedlog poboljšanja (nije implementirati — samo opisati u radu)
-- **Hibridni mod:** ESP8266 spava N minuta, ali ako je vlaga blizu thresholda (npr. 10% iznad), skrati interval na 1 minutu
+- **Hibridni mod:** ESP32-S3 spava N minuta, ali ako je vlaga blizu thresholda (npr. 10% iznad), skrati interval na 1 minutu
 - Adaptivni sleep interval koji balansira potrošnju i preciznost
 
 ---
@@ -70,10 +70,12 @@ Frontend ──manual refresh──────→ .NET Minimal API
 navodnjavanje/
 ├── senzori/
 │   ├── vlaga          → ESP32 publishuje (float, %)
-│   └── temperatura    → ESP32 publishuje (float, °C)
+│   ├── temperatura    → ESP32 publishuje (float, °C)
+│   └── komanda        → API publishuje "read" (diagnostički live read na zahtjev — ne sprema se u bazu)
 ├── pumpa/
-│   ├── status         → ESP8266 publishuje (bool: true=ON, false=OFF)
-│   └── komanda        → API publishuje komandu za pumpu (bool)
+│   ├── status         → ESP32-S3 publishuje (bool: true=ON, false=OFF)
+│   ├── komanda        → API publishuje komandu za pumpu (bool)
+│   └── wake           → ESP32-S3 publishuje pri svakom buđenju iz deep sleepa (Mod 2/3)
 ├── config/
 │   ├── threshold      → API publishuje RETAINED (float, %)
 │   ├── mod            → API publishuje RETAINED (int: 1/2/3)
@@ -83,7 +85,7 @@ navodnjavanje/
     └── status         → API publishuje (bool: true=aktivna, false=završena)
 ```
 
-**Napomena:** `config/*` topici moraju biti **retained=true** jer ESP8266 u deep sleepu treba odmah primiti zadnju vrijednost pri buđenju.
+**Napomena:** `config/*` topici moraju biti **retained=true** jer ESP32-S3 u deep sleepu treba odmah primiti zadnju vrijednost pri buđenju.
 
 ---
 
@@ -171,6 +173,10 @@ GET    /api/sesije/aktivna         → trenutno aktivna sesija (ako postoji)
 GET    /api/ocitavanja/latest      → zadnje očitavanje (za dashboard)
 GET    /api/sesije/{id}/ocitavanja → sva očitavanja za sesiju (za grafove)
 GET    /api/sesije/{id}/eventi     → svi eventi pumpe za sesiju
+GET    /api/sesije/{id}/wakeup     → buđenja iz deep sleepa za sesiju (Mod 2/3 — oznake na grafu)
+
+# Dijagnostika senzora (live read, ne sprema u bazu)
+POST   /api/senzori/citaj          → publish "read" → čeka svježe očitavanje → vrati vlaga/temp (online/fresh flagovi)
 
 # Pumpa (manual override)
 POST   /api/pumpa/on               → publish komandu za paljenje pumpe
@@ -228,7 +234,7 @@ API mora imati `IHostedService` koji:
 - Mjeri se: **% vremena kada je vlaga ispod thresholda** po sesiji
 - Manji % = precizniji sustav
 
-### Potrošnja energije (ESP8266 — aktuatorski uređaj)
+### Potrošnja energije (ESP32-S3 — aktuatorski uređaj)
 - Metoda: Li-Ion baterija 2100mAh, mjeri se koliko dugo traje u svakom modu
 - Mod 1: baterija traje X sati → izračun prosječne potrošnje (mA)
 - Mod 2: baterija traje Y sati → izračun prosječne potrošnje (mA)
@@ -260,9 +266,11 @@ float vlahaPostotak(int raw) {
 
 ---
 
-## ESP8266 — Deep Sleep setup
+## ESP32-S3 — Deep Sleep setup
 
-**Fizički:** Spojiti kratku žicu između IO16 (WAKE) i RESET pina na Dasduino Connect pločici.
+**Napomena:** ESP32-S3 buđenje iz *deep sleepa* radi preko ugrađenog RTC timera
+(`esp_sleep_enable_timer_wakeup`), bez dodatnog ožičenja — za razliku od ESP8266 koji
+zahtijeva žicu IO16↔RST.
 
 ```cpp
 // Mod 2 — osnovna struktura koda
@@ -288,7 +296,8 @@ void setup() {
     mqttClient.publish("navodnjavanje/senzori/vlaga", String(vlaga));
     
     // idi spavati
-    ESP.deepSleep(intervalMinuta * 60 * 1000000ULL);  // microsekunde
+    esp_sleep_enable_timer_wakeup(intervalMinuta * 60ULL * 1000000ULL);  // microsekunde
+    esp_deep_sleep_start();
 }
 
 void loop() {
@@ -309,7 +318,7 @@ void loop() {
 
 **Tjedan 1:** MQTT broker (Mosquitto lokalno), ESP32 scenarij 1, osnovna baza shema
 
-**Tjedan 2:** ESP8266 deep sleep (scenarij 2), retained messages, .NET API osnova, frontend dashboard
+**Tjedan 2:** ESP32-S3 deep sleep (scenarij 2), retained messages, .NET API osnova, frontend dashboard
 
 **Tjedan 3:** Scenarij 3, frontend kontrola sesija i povijest, kalibracija senzora
 

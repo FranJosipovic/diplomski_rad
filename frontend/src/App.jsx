@@ -4,6 +4,7 @@ import Dashboard from "./pages/Dashboard.jsx";
 import KontrolaSesije from "./pages/KontrolaSesije.jsx";
 import PovijestSesija from "./pages/PovijestSesija.jsx";
 import UsporedbaSeija from "./pages/UsporedbaSeija.jsx";
+import Dijagnostika from "./pages/Dijagnostika.jsx";
 
 export default function App() {
   return (
@@ -14,6 +15,7 @@ export default function App() {
           <Route path="/sesija" element={<KontrolaSesije />} />
           <Route path="/povijest" element={<PovijestSesija />} />
           <Route path="/usporedba" element={<UsporedbaSeija />} />
+          <Route path="/dijagnostika" element={<Dijagnostika />} />
         </Routes>
       </Layout>
     </BrowserRouter>

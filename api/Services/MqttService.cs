@@ -67,6 +67,7 @@ public class MqttService : BackgroundService
             await _client.SubscribeAsync("navodnjavanje/senzori/#");
             await _client.SubscribeAsync("navodnjavanje/pumpa/status");
             await _client.SubscribeAsync("navodnjavanje/pumpa/baterija");
+            await _client.SubscribeAsync("navodnjavanje/pumpa/wake");
             await _client.SubscribeAsync("navodnjavanje/config/threshold");
             await _client.SubscribeAsync("navodnjavanje/uredaj/#");
 
@@ -134,6 +135,11 @@ public class MqttService : BackgroundService
                 _logger.LogInformation("Pumpa uredaj: {status}", payload);
                 break;
 
+            case "navodnjavanje/pumpa/wake":
+                _logger.LogInformation("Pumpa wake iz deep sleepa");
+                await SaveWakeEventAsync();
+                break;
+
             case "navodnjavanje/pumpa/baterija":
                 var batDoc = System.Text.Json.JsonDocument.Parse(payload);
                 var vin = batDoc.RootElement.GetProperty("vin").GetSingle();
@@ -185,6 +191,23 @@ public class MqttService : BackgroundService
             SesijaId = aktivna.Id,
             Vin = (decimal)vin,
             Postotak = pct,
+            Timestamp = DateTimeOffset.UtcNow
+        });
+
+        await db.SaveChangesAsync();
+    }
+
+    private async Task SaveWakeEventAsync()
+    {
+        using var scope = _scopeFactory.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+        var aktivna = await db.Sesije.FirstOrDefaultAsync(s => s.Kraj == null);
+        if (aktivna is null) return;
+
+        db.WakeEventi.Add(new WakeEvent
+        {
+            SesijaId = aktivna.Id,
             Timestamp = DateTimeOffset.UtcNow
         });
 

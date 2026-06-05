@@ -16,4 +16,5 @@ public class Sesija
     public ICollection<Ocitavanje> Ocitavanja { get; set; } = [];
     public ICollection<EventPumpe> EventiPumpe { get; set; } = [];
     public ICollection<OcitavanjeBaterije> OcitavanjaBaterije { get; set; } = [];
+    public ICollection<WakeEvent> WakeEventi { get; set; } = [];
 }
